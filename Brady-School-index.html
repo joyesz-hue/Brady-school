@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Brady School — Grade 7</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#172033}
+button{font:inherit} .app{min-height:100vh}.top{height:64px;background:#111827;color:white;display:flex;align-items:center;padding:0 18px;gap:14px;position:sticky;top:0;z-index:5}
+.logo{font-weight:800;font-size:20px}.top small{opacity:.7}.wrap{max-width:1100px;margin:auto;padding:20px}
+.nav{display:flex;gap:8px;overflow:auto;padding-bottom:14px}.nav button{border:0;background:white;padding:11px 15px;border-radius:12px;white-space:nowrap}.nav button.active{background:#111827;color:white}
+.card{background:white;border:1px solid #e4e8ef;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px #00000008}
+h1,h2,h3{margin-top:0}.muted{color:#667085}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.big{font-size:30px;font-weight:800}.btn{border:0;border-radius:12px;padding:12px 16px;background:#111827;color:white;font-weight:700;cursor:pointer}.btn.alt{background:#eef2f7;color:#172033}.btn.good{background:#16794c}.btn.warn{background:#9a5b00}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.between{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.progress{height:10px;background:#e8edf3;border-radius:99px;overflow:hidden}.bar{height:100%;background:#111827;border-radius:99px}
+.task{border:1px solid #e4e8ef;border-radius:16px;padding:15px;margin:10px 0}.task.done{background:#f0faf5}.task.active{border:2px solid #111827}
+.timer{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}.pill{display:inline-block;padding:5px 9px;border-radius:99px;background:#eef2f7;font-size:12px;font-weight:700}
+textarea,input,select{width:100%;padding:12px;border:1px solid #d8dee8;border-radius:10px;background:white;font:inherit}
+.lesson{font-size:17px;line-height:1.55}.choice{width:100%;text-align:left;background:#f7f9fc;color:#172033;border:1px solid #dfe5ee;margin:6px 0}.choice:hover{background:#eef2f7}
+footer{padding:30px;text-align:center;color:#788399;font-size:12px}
+@media(max-width:650px){.wrap{padding:14px}.top{height:58px}.big{font-size:26px}.btn{padding:13px 15px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top"><div class="logo">Brady School</div><small>Grade 7 • Independent Learning</small></header>
+<main class="wrap">
+<nav class="nav" id="nav"></nav>
+<div id="view"></div>
+</main>
+<footer>Local-first school dashboard • Progress is saved on this device.</footer>
+</div>
+<script>
+const courses=[
+{id:"math",name:"Mathematics",minutes:60},
+{id:"ela",name:"English Language Arts",minutes:60},
+{id:"science",name:"Science",minutes:45},
+{id:"history",name:"History & Civics",minutes:45},
+{id:"life",name:"Life & Independence",minutes:30},
+{id:"tech",name:"Technology & Digital Life",minutes:30},
+{id:"critical",name:"Critical Thinking & Media",minutes:30}
+];
+const topics={
+math:["Ratios and unit rates","Rational numbers","Expressions and equations","Percent, tax and interest","Geometry and scale","Statistics and probability","Math in real life"],
+ela:["Reading for evidence","Argument and counterargument","Writing clearly","Research and sources","Rhetoric and persuasion","Grammar and style","Independent writing"],
+science:["How science knows","Cells and systems","Energy and matter","Earth systems","Weather and climate","Ecology","Engineering"],
+history:["How historians know","Indigenous North America","Atlantic slavery and resistance","Emancipation and Reconstruction","Industrialization","Civil rights and power","Modern civics"],
+life:["Budgeting","Banking and credit","Jobs and paychecks","Cooking basics","Home care","Contracts and consumer decisions","Goal planning"],
+tech:["The internet","Security and passwords","Algorithms and feeds","AI strengths and limits","Spotting manipulation","Build a web page","Digital footprint"],
+critical:["Fact vs. claim","Source detective","Correlation vs. causation","Statistics","Fallacies","Confirmation bias","Changing your mind well"]
+};
+const schedule=[
+["Mathematics","English Language Arts","Science","History & Civics","Life & Independence"],
+["Mathematics","English Language Arts","Science","History & Civics","Technology & Digital Life"],
+["Mathematics","English Language Arts","Science","History & Civics","Life & Independence"],
+["Mathematics","English Language Arts","Science","History & Civics","Technology & Digital Life"],
+["Mathematics","English Language Arts","Science","History & Civics","Critical Thinking & Media"]
+];
+let state=JSON.parse(localStorage.getItem("bradyV5")||"{}");
+state.completed=state.completed||{};state.minutes=state.minutes||{};state.days=state.days||{};state.reflections=state.reflections||{};state.settings=state.settings||{schoolStart:"08:30"};
+let page="today", activeTimer=null, timerHandle=null;
+
+function save(){localStorage.setItem("bradyV5",JSON.stringify(state))}
+function key(){return new Date().toISOString().slice(0,10)}
+function today(){let d=new Date();return d.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"})}
+function dayIndex(){let d=new Date().getDay();return d===0?4:d===6?4:d-1}
+function courseByName(n){return courses.find(c=>c.name===n)}
+function lessonCount(id){return topics[id].length}
+function doneCount(id){return Object.keys(state.completed).filter(k=>k.startsWith(id+":")).length}
+function nextLesson(id){for(let i=0;i<lessonCount(id);i++)if(!state.completed[id+":"+i])return i;return null}
+function nav(){
+ const items=[["today","Today"],["dashboard","Dashboard"],["courses","Courses"],["year","School Year"],["progress","Progress"]];
+ document.getElementById("nav").innerHTML=items.map(x=>`<button class="${page===x[0]?"active":""}" onclick="go('${x[0]}')">${x[1]}</button>`).join("");
+}
+function go(p){page=p;render()}
+function render(){nav();({today:todayView,dashboard:dashboardView,courses:coursesView,year:yearView,progress:progressView}[page])()}
+function todayTasks(){
+ let idx=dayIndex();let names=schedule[idx];
+ return names.map(n=>{let c=courseByName(n);return {c,lesson:nextLesson(c.id)}})
+}
+function taskKey(c){return key()+":"+c.id}
+function fmt(sec){sec=Math.max(0,Math.round(sec));return `${String(Math.floor(sec/60)).padStart(2,"0")}:${String(sec%60).padStart(2,"0")}`}
+function todaySeconds(){return todayTasks().reduce((a,t)=>a+(state.minutes[taskKey(t.c)]||0),0)}
+function todayView(){
+ let tasks=todayTasks(), total=tasks.reduce((a,t)=>a+t.c.minutes,0), sec=todaySeconds(), pct=Math.min(100,Math.round(sec/60/total*100));
+ let reflection=state.reflections[key()]||"";
+ document.getElementById("view").innerHTML=`
+ <div class="between"><div><h1>Today's School Day</h1><div class="muted">${today()}</div></div><button class="btn" onclick="endDay()">Finish School Day</button></div>
+ <div class="card"><div class="between"><div><div class="muted">School-day progress</div><div class="big">${fmt(sec)}</div></div><div class="pill">${Math.round(sec/60)} / ${total} min</div></div><div class="progress" style="margin-top:12px"><div class="bar" style="width:${pct}%"></div></div><p class="muted">${pct}% of today's planned time. Work independently: start a task, do the lesson, then mark it complete.</p></div>
+ ${tasks.map(t=>taskHTML(t)).join("")}
+ <div class="card"><h3>End-of-day reflection</h3><textarea id="reflection" rows="4" placeholder="What did you learn? What was difficult? What did you figure out on your own?">${reflection}</textarea><button class="btn alt" style="margin-top:10px" onclick="saveReflection()">Save reflection</button></div>`;
+}
+function taskHTML(t){
+ let k=taskKey(t.c), sec=state.minutes[k]||0, done=!!state.days[k], active=activeTimer===k;
+ return `<div class="task ${done?"done":""} ${active?"active":""}">
+ <div class="between"><div><span class="pill">${t.c.name}</span><h3 style="margin:8px 0 2px">${t.lesson===null?"Course complete":t.c.name+" • Lesson "+(t.lesson+1)}</h3><div class="muted">${t.lesson===null?"All current lessons completed.":"Focus: "+topics[t.c.id][t.lesson]}</div></div><div class="timer" id="timer-${t.c.id}">${fmt(sec)}</div></div>
+ <div class="row" style="margin-top:12px">${done?'<span class="pill">✓ Complete</span>':`<button class="btn" onclick="toggleTimer('${k}','${t.c.id}')">${active?"Pause":"Start"}</button><button class="btn alt" onclick="openLesson('${t.c.id}',${t.lesson===null?0:t.lesson})">Open Lesson</button><button class="btn good" onclick="completeTask('${k}','${t.c.id}',${t.lesson===null?0:t.lesson})">Mark Complete</button>`}</div>
+ </div>`;
+}
+function toggleTimer(k,id){
+ if(activeTimer===k){clearInterval(timerHandle);activeTimer=null;save();render();return}
+ if(activeTimer){clearInterval(timerHandle)}
+ activeTimer=k;let last=Date.now();
+ timerHandle=setInterval(()=>{let now=Date.now(),add=(now-last)/1000;last=now;state.minutes[k]=(state.minutes[k]||0)+add;save();let el=document.getElementById("timer-"+id);if(el)el.textContent=fmt(state.minutes[k])},1000);render()
+}
+function completeTask(k,id,lesson){
+ if(activeTimer===k){clearInterval(timerHandle);activeTimer=null}
+ state.days[k]=true;
+ if(topics[id][lesson])state.completed[id+":"+lesson]=true;
+ save();render()
+}
+function openLesson(id,lesson){page="lesson";nav();lessonView(id,lesson)}
+function lessonView(id,lesson){
+ let c=courseByName(id), title=topics[id][lesson]||"Course Complete";
+ document.getElementById("view").innerHTML=`<button class="btn alt" onclick="go('today')">← Back to Today</button><div class="card" style="margin-top:14px"><span class="pill">${c.name}</span><h1>${title}</h1><div class="lesson">${lessonText(id,lesson)}</div></div><div class="card"><h3>Knowledge check</h3><p>Write or say your answer before revealing the model response.</p><textarea id="answer" rows="4" placeholder="My answer..."></textarea><button class="btn" style="margin-top:10px" onclick="document.getElementById('model').style.display='block'">Show model response</button><div id="model" style="display:none;margin-top:14px;padding:14px;background:#f5f7fb;border-radius:12px">${model(id,lesson)}</div></div>`;
+}
+function lessonText(id,l){
+ let q=topics[id][l]||"this topic";
+ return `<p><strong>Goal:</strong> Understand ${q.toLowerCase()} well enough to explain it in your own words and use it in a real situation.</p><p><strong>Evidence habit:</strong> Ask what the claim is, what evidence supports it, who is making the claim, how the evidence was collected, and what could change your mind.</p><p><strong>Practice:</strong> Give one real-world example. Then identify one question you would investigate before accepting a strong claim about this topic.</p>`;
+}
+function model(id,l){return `<strong>There is not always one perfect answer.</strong> A strong response identifies the main idea, gives a reason or evidence, and acknowledges what information is still missing. For this lesson, the important skill is being able to explain your reasoning rather than simply guessing what answer the teacher wants.`}
+function dashboardView(){
+ let total=courses.reduce((a,c)=>a+lessonCount(c.id),0),done=courses.reduce((a,c)=>a+doneCount(c.id),0);
+ document.getElementById("view").innerHTML=`<h1>Welcome to Brady School</h1><div class="grid"><div class="card"><div class="muted">Overall lesson progress</div><div class="big">${done}/${total}</div><div class="progress"><div class="bar" style="width:${done/total*100}%"></div></div></div><div class="card"><div class="muted">Today</div><div class="big">${fmt(todaySeconds())}</div><button class="btn" onclick="go('today')">Start School Day</button></div><div class="card"><div class="muted">School year</div><div class="big">36 weeks</div><button class="btn alt" onclick="go('year')">View Year</button></div></div><div class="card"><h2>How this school works</h2><p>Learn the concept. Practice it. Question claims. Use evidence. Build real-world skills. Explain your reasoning. Make something useful.</p><p class="muted">The goal is not just finishing lessons. It is becoming more capable of learning and solving problems independently.</p></div><h2>Courses</h2><div class="grid">${courses.map(c=>`<div class="card"><h3>${c.name}</h3><div class="muted">${doneCount(c.id)} / ${lessonCount(c.id)} lessons</div><div class="progress" style="margin-top:10px"><div class="bar" style="width:${doneCount(c.id)/lessonCount(c.id)*100}%"></div></div></div>`).join("")}</div>`;
+}
+function coursesView(){document.getElementById("view").innerHTML=`<h1>My Courses</h1><div class="grid">${courses.map(c=>`<div class="card"><span class="pill">${c.minutes} min target</span><h2>${c.name}</h2><p class="muted">${doneCount(c.id)} of ${lessonCount(c.id)} lessons complete.</p><button class="btn" onclick="let l=nextLesson('${c.id}');openLesson('${c.id}',l===null?0:l)">Continue</button></div>`).join("")}</div>`}
+function yearView(){let completedWeeks=Object.keys(state.days).length?Math.min(36,Math.floor(Object.keys(state.days).length/25)):0;document.getElementById("view").innerHTML=`<h1>36-Week School Year</h1><div class="card"><p>Each week combines core academics with practical independence, evidence-based history, science investigation, technology, and critical thinking.</p><div class="grid">${Array.from({length:36},(_,i)=>`<div class="card" style="margin:0"><strong>Week ${i+1}</strong><p class="muted">${i<9?"Foundation":i<18?"Build":i<27?"Apply":"Independent work & portfolio"}</p></div>`).join("")}</div></div>`}
+function progressView(){let days=Object.keys(state.days).filter(k=>k.endsWith(":math")||k.endsWith(":ela")).map(k=>k.split(":")[0]);document.getElementById("view").innerHTML=`<h1>Progress & Parent</h1><div class="grid"><div class="card"><div class="muted">Lessons completed</div><div class="big">${Object.keys(state.completed).length}</div></div><div class="card"><div class="muted">School-day task completions</div><div class="big">${Object.keys(state.days).length}</div></div><div class="card"><div class="muted">Reflections saved</div><div class="big">${Object.keys(state.reflections).length}</div></div></div><div class="card"><h2>What is being tracked</h2><ul><li>Lesson completion</li><li>Daily instructional minutes</li><li>Daily task completion</li><li>End-of-day reflections</li><li>Course progress</li></ul><button class="btn" onclick="downloadReport()">Download progress report</button></div>`}
+function saveReflection(){state.reflections[key()]=document.getElementById("reflection").value;save();alert("Reflection saved.");}
+function endDay(){state.attendance=state.attendance||{};state.attendance[key()]={minutes:Math.round(todaySeconds()/60),completed:Object.keys(state.days).filter(k=>k.startsWith(key())).length};save();alert("School day recorded. Nice work.");}
+function downloadReport(){let rows=["Brady School — Grade 7 Progress Report","","Date,Minutes,Completed Tasks,Reflection"];Object.keys(state.attendance||{}).sort().forEach(d=>{let a=state.attendance[d];rows.push(`${d},${a.minutes},${a.completed},"${(state.reflections[d]||"").replaceAll('"','""')}"`)});let blob=new Blob([rows.join("\\n")],{type:"text/csv"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="Brady-School-Progress.csv";a.click();}
+render();
+</script>
+</body>
+</html>
